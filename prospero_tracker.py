@@ -17,52 +17,44 @@ def main():
     current_tickers = [t.strip().upper() for t in raw_input.split() if t.strip()]
     if not current_tickers: return
 
-    # Load or Create
     if os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
     else:
-        df = pd.DataFrame(columns=['Ticker', 'Date_In', 'Price_In', 'Date_Out', 'Price_Out', 'Status', 'Days_Held', 'Live_Gain_%'])
+        df = pd.DataFrame(columns=['Ticker', 'Date_In', 'Price_In', 'Date_Out', 'Price_Out', 'Status', 'Days_Held', 'Gain_%'])
 
     now = datetime.now()
     today_str = now.strftime('%Y-%m-%d')
 
-    # Update All Rows (Active and just Closed)
-    active_mask = df['Status'] == 'Active'
-    
+    # Update Existing Rows
     for idx, row in df.iterrows():
         ticker = row['Ticker']
+        date_in = pd.to_datetime(row['Date_In'])
         
         # Calculate Days Held
-        date_in = pd.to_datetime(row['Date_In'])
         end_date = now if row['Status'] == 'Active' else pd.to_datetime(row['Date_Out'])
         df.at[idx, 'Days_Held'] = (end_date - date_in).days
 
-        # Handle Closing
+        # Close position if ticker is missing from current list
         if row['Status'] == 'Active' and ticker not in current_tickers:
-            price_out = get_price(ticker)
-            if price_out:
-                df.at[idx, 'Price_Out'] = price_out
-                df.at[idx, 'Date_Out'] = today_str
-                df.at[idx, 'Status'] = 'Closed'
-                gain = ((price_out - row['Price_In']) / row['Price_In']) * 100
-                df.at[idx, 'Live_Gain_%'] = f"{'▲' if gain >= 0 else '▼'} {gain:.2f}%"
+            p_out = get_price(ticker)
+            if p_out:
+                df.at[idx, 'Price_Out'], df.at[idx, 'Date_Out'], df.at[idx, 'Status'] = p_out, today_str, 'Closed'
+                gain = ((p_out - row['Price_In']) / row['Price_In']) * 100
+                df.at[idx, 'Gain_%'] = f"{'▲' if gain >= 0 else '▼'} {gain:.2f}%"
 
         # Update Live Gain for Active Tickers
         elif row['Status'] == 'Active':
             current_p = get_price(ticker)
             if current_p:
                 gain = ((current_p - row['Price_In']) / row['Price_In']) * 100
-                df.at[idx, 'Live_Gain_%'] = f"{'▲' if gain >= 0 else '▼'} {gain:.2f}%"
+                df.at[idx, 'Gain_%'] = f"{'▲' if gain >= 0 else '▼'} {gain:.2f}%"
 
     # Add New Tickers
     for ticker in current_tickers:
         if ticker not in df[df['Status'] == 'Active']['Ticker'].values:
             p_in = get_price(ticker)
             if p_in:
-                new_row = {
-                    'Ticker': ticker, 'Date_In': today_str, 'Price_In': p_in, 
-                    'Status': 'Active', 'Days_Held': 0, 'Live_Gain_%': '0.00%'
-                }
+                new_row = {'Ticker': ticker, 'Date_In': today_str, 'Price_In': p_in, 'Status': 'Active', 'Days_Held': 0, 'Gain_%': '0.00%'}
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
     df.to_csv(CSV_FILE, index=False)
