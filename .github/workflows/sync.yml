@@ -35,3 +35,13 @@ jobs:
           git add signals.csv
           git commit -m "Updated signals" || exit 0
           git push
+          - name: Run Tracker
+        env:
+          PROSPERO_LIST: ${{ github.event.inputs.tickers }}
+        run: |
+          python prospero_tracker.py
+          # This part creates a visual table in your README
+          echo "### 📈 Prospero Performance Tracker" > README.md
+          echo "| Ticker | Status | Days | Gain/Loss |" >> README.md
+          echo "| --- | --- | --- | --- |" >> README.md
+          tail -n +2 signals.csv | awk -F, '{print "| "$1" | "$6" | "$7" | "$8" |"}' >> README.md
