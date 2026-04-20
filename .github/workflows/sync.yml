@@ -21,26 +21,22 @@ jobs:
           python-version: '3.10'
 
       - name: Install Libs
-        run: |
-          pip install pandas yfinance
+        run: pip install pandas yfinance
 
       - name: Run Tracker
         env:
           PROSPERO_LIST: ${{ github.event.inputs.tickers }}
         run: |
-          # 1. Execute the Python script to update the CSV
           python prospero_tracker.py
-          
-          # 2. Re-generate the Dashboard for the README
           echo "### 📈 Prospero Signal Dashboard" > README.md
           echo "Last Updated: $(date -u) UTC" >> README.md
           echo "" >> README.md
-          echo "| Ticker | In (Open) | Current | Status | Days | Gain/Loss |" >> README.md
-          echo "| :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
+          echo "| Ticker | Current | Gain % | Date In | Price In | Status | Days |" >> README.md
+          echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # This line reads the CSV and formats the rows for the Markdown table
-          # It skips the header and handles the 9 columns of our new CSV structure
-          tail -n +2 signals.csv | awk -F, '{print "| " $1 " | $" $3 " | $" $4 " | " $7 " | " $8 " | " $9 " |"}' >> README.md
+          # awk command updated for new column mapping:
+          # $1=Ticker, $2=Current, $3=Gain%, $4=Date_In, $5=Price_In, $8=Status, $9=Days
+          tail -n +2 signals.csv | awk -F, '{print "| **" $1 "** | $" $2 " | " $3 " | " $4 " | $" $5 " | " $8 " | " $9 " |"}' >> README.md
 
       - name: Save Changes
         run: |
