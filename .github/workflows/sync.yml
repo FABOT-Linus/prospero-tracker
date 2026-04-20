@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       tickers:
-        description: 'Enter tickers (e.g., AAPL NVDA)'
+        description: 'Tickers (e.g. AAPL NVDA)'
         required: true
 
 jobs:
@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout Repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -26,22 +26,19 @@ jobs:
       - name: Run Tracker
         env:
           PROSPERO_LIST: ${{ github.event.inputs.tickers }}
-        run: python prospero_tracker.py
-
-      - name: Save Data
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add signals.csv
-          git commit -m "Updated signals" || exit 0
-          git push
-  - name: Run Tracker
-        env:
-          PROSPERO_LIST: ${{ github.event.inputs.tickers }}
         run: |
           python prospero_tracker.py
-          # This part creates a visual table in your README
-          echo "### 📈 Prospero Performance Tracker" > README.md
-          echo "| Ticker | Status | Days | Gain/Loss |" >> README.md
-          echo "| --- | --- | --- | --- |" >> README.md
-          tail -n +2 signals.csv | awk -F, '{print "| "$1" | "$6" | "$7" | "$8" |"}' >> README.md
+          # Generate the Dashboard in README.md
+          echo "### 📈 Prospero Signal Dashboard" > README.md
+          echo "| Ticker | Status | Days | Live Gain/Loss |" >> README.md
+          echo "| :--- | :--- | :--- | :--- |" >> README.md
+          # Reads the CSV and turns it into Markdown table rows
+          tail -n +2 signals.csv | awk -F, '{print "| " $1 " | " $6 " | " $7 " | " $8 " |"}' >> README.md
+
+      - name: Save Changes
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add signals.csv README.md
+          git commit -m "Update Dashboard: ${{ github.event.inputs.tickers }}" || exit 0
+          git push
