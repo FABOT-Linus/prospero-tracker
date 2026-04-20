@@ -35,7 +35,7 @@ jobs:
           git add signals.csv
           git commit -m "Updated signals" || exit 0
           git push
-          - name: Run Tracker
+  - name: Run Tracker
         env:
           PROSPERO_LIST: ${{ github.event.inputs.tickers }}
         run: |
