@@ -29,14 +29,16 @@ jobs:
         run: |
           python prospero_tracker.py
           echo "### 📈 Prospero Signal Dashboard" > README.md
-          echo "Last Updated: $(date -u) UTC" >> README.md
+          echo "Last Updated (EST): $(TZ='America/Toronto' date) " >> README.md
           echo "" >> README.md
-          echo "| Ticker | Current | Gain % | Date In | Price In | Status | Days |" >> README.md
+          echo "| Ticker | Current | Gain % | Date In | Price In (Open) | Status | Days |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # awk command updated for new column mapping:
-          # $1=Ticker, $2=Current, $3=Gain%, $4=Date_In, $5=Price_In, $8=Status, $9=Days
-          tail -n +2 signals.csv | awk -F, '{print "| **" $1 "** | $" $2 " | " $3 " | " $4 " | $" $5 " | " $8 " | " $9 " |"}' >> README.md
+          while IFS=, read -r ticker current gain date_in price_in d_out p_out status days; do
+            if [ "$ticker" != "Ticker" ]; then
+              echo "| **$ticker** | \$$current | $gain | $date_in | \$$price_in | $status | $days |" >> README.md
+            fi
+          done < signals.csv
 
       - name: Save Changes
         run: |
