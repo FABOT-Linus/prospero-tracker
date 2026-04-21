@@ -1,5 +1,5 @@
 ### 📈 Prospero Active Signals
-Last Updated (Toronto): 2026-04-21 15:51 EDT
+Last Updated (Toronto): 2026-04-21 18:54 EDT
 
 | Ticker | Current | Gain/Loss | Today | Date In | Price In | Days |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
