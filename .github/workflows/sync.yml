@@ -1,11 +1,13 @@
 name: Prospero Sync
 on:
+  # Automated schedule: 10am, 12pm, 2pm, 4pm ET (Monday-Friday)
+  # 14, 16, 18, 20 UTC = 10, 12, 2, 4 ET
   schedule:
     - cron: '0 14,16,18,20 * * 1-5'
   workflow_dispatch:
     inputs:
       tickers:
-        description: 'Enter symbols (e.g., AAPL NVDA TSLA) or leave blank'
+        description: 'Enter symbols (e.g., AAPL NVDA TSLA) or leave blank to use current active list'
         required: false
 
 jobs:
@@ -31,13 +33,15 @@ jobs:
         run: |
           python prospero_tracker.py
           
-          # Create the Dashboard
+          # Dashboard Header
           echo "### 📈 Prospero Active Signals" > README.md
           echo "Last Updated (Toronto): $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
           echo "" >> README.md
           echo "| Ticker | Current | Gain/Loss | Today's Date | Today | Date In | Price In | Days |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
+          # Reading Active Tickers from CSV
+          # Columns: 1=Ticker, 2=Current, 3=TotalGain, 4=TodayDate, 5=TodayGain, 6=DateIn, 7=PriceIn, 8=Days, 9=Status, 10=DateOut, 11=PriceOut
           tail -n +2 signals.csv | while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
             if [ "$status" == "Active" ]; then
               echo "| **$ticker** | \$$current | $total | $tdate | $today | $date_in | \$$price_in | $days |" >> README.md
@@ -49,6 +53,7 @@ jobs:
           echo "| Ticker | Exit Date | Exit Price | Total Performance |" >> README.md
           echo "| :--- | :--- | :--- | :--- |" >> README.md
 
+          # Reading Closed Tickers from CSV
           tail -n +2 signals.csv | while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
             if [ "$status" == "Closed" ]; then
               echo "| $ticker | $d_out | \$$p_out | $total |" >> README.md
@@ -71,7 +76,7 @@ jobs:
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           subject: Prospero Signal Report - $(date +'%Y-%m-%d')
-          to: ${{ secrets.MAIL_USERNAME }}
+          to: linus.chen1984@gmail.com
           from: Prospero Tracker
           body: file://README.md
           convert_markdown: true
