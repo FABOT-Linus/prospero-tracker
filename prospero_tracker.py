@@ -20,12 +20,10 @@ def get_historical_open(ticker, date_str):
         return None
 
 def format_gain(gain_val):
-    """Uses shields.io badges for guaranteed color in GitHub tables."""
-    label = "UP" if gain_val >= 0 else "DOWN"
-    color = "success" if gain_val >= 0 else "critical" # Green vs Red
-    formatted_pct = f"{abs(gain_val):.2f}%25" # %25 is the URL code for %
-    # This creates a clean, colored badge image
-    return f"![Gain](https://img.shields.io/badge/{label}-{formatted_pct}-{color}?style=flat-square)"
+    """Uses bulletproof Emojis for color and direction."""
+    # 🟢 for Gains, 🔴 for Losses
+    indicator = "🟢 ▲" if gain_val >= 0 else "🔴 ▼"
+    return f"{indicator} {abs(gain_val):.2f}%"
 
 def main():
     raw_input = os.getenv('PROSPERO_LIST', '')
@@ -41,7 +39,7 @@ def main():
     for idx, row in df.iterrows():
         ticker = row['Ticker']
         
-        # Lock Price_In to the Open price
+        # Ensure Price_In is locked to the Open price of the Date_In
         if pd.isna(row['Price_In']) or row['Price_In'] == 0 or row['Status'] == 'Active':
              h_open = get_historical_open(ticker, str(row['Date_In']))
              if h_open: df.at[idx, 'Price_In'] = h_open
