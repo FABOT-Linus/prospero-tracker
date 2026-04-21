@@ -20,8 +20,6 @@ def get_historical_open(ticker, date_str):
         return None
 
 def format_gain(gain_val):
-    """Uses bulletproof Emojis for color and direction."""
-    # 🟢 for Gains, 🔴 for Losses
     indicator = "🟢 ▲" if gain_val >= 0 else "🔴 ▼"
     return f"{indicator} {abs(gain_val):.2f}%"
 
@@ -31,44 +29,61 @@ def main():
     if not current_tickers: return
 
     cols = ['Ticker', 'Current_Price', 'Gain_%', 'Date_In', 'Price_In', 'Date_Out', 'Price_Out', 'Status', 'Days_Held']
-    df = pd.read_csv(CSV_FILE) if os.path.exists(CSV_FILE) else pd.DataFrame(columns=cols)
+    
+    if os.path.exists(CSV_FILE):
+        df = pd.read_csv(CSV_FILE)
+        # CLEANUP: If duplicates already exist, keep only the first 'Active' one
+        df = df.drop_duplicates(subset=['Ticker', 'Status'], keep='first')
+    else:
+        df = pd.DataFrame(columns=cols)
 
     now = datetime.now()
     today_str = now.strftime('%Y-%m-%d')
 
+    # Update Existing Rows
     for idx, row in df.iterrows():
         ticker = row['Ticker']
         
-        # Ensure Price_In is locked to the Open price of the Date_In
-        if pd.isna(row['Price_In']) or row['Price_In'] == 0 or row['Status'] == 'Active':
-             h_open = get_historical_open(ticker, str(row['Date_In']))
-             if h_open: df.at[idx, 'Price_In'] = h_open
+        if row['Status'] == 'Active':
+            # 1. Lock Price_In to the Open price of the Date_In
+            if pd.isna(row['Price_In']) or row['Price_In'] == 0:
+                 h_open = get_historical_open(ticker, str(row['Date_In']))
+                 if h_open: df.at[idx, 'Price_In'] = h_open
 
-        date_in_dt = pd.to_datetime(row['Date_In'])
-        end_date = now if row['Status'] == 'Active' else pd.to_datetime(row['Date_Out'])
-        df.at[idx, 'Days_Held'] = (end_date - date_in_dt).days
+            # 2. Update Days Held
+            date_in_dt = pd.to_datetime(row['Date_In'])
+            df.at[idx, 'Days_Held'] = (now - date_in_dt).days
 
-        if row['Status'] == 'Active' and ticker not in current_tickers:
-            p_out = get_current_price(ticker)
-            if p_out:
-                df.at[idx, 'Price_Out'], df.at[idx, 'Date_Out'], df.at[idx, 'Status'] = p_out, today_str, 'Closed'
-                df.at[idx, 'Current_Price'] = p_out
-                gain = ((p_out - df.at[idx, 'Price_In']) / df.at[idx, 'Price_In']) * 100
-                df.at[idx, 'Gain_%'] = format_gain(gain)
-        elif row['Status'] == 'Active':
-            curr_p = get_current_price(ticker)
-            if curr_p:
-                df.at[idx, 'Current_Price'] = curr_p
-                gain = ((curr_p - df.at[idx, 'Price_In']) / df.at[idx, 'Price_In']) * 100
-                df.at[idx, 'Gain_%'] = format_gain(gain)
+            # 3. Handle Exits
+            if ticker not in current_tickers:
+                p_out = get_current_price(ticker)
+                if p_out:
+                    df.at[idx, 'Price_Out'], df.at[idx, 'Date_Out'], df.at[idx, 'Status'] = p_out, today_str, 'Closed'
+                    df.at[idx, 'Current_Price'] = p_out
+                    gain = ((p_out - df.at[idx, 'Price_In']) / df.at[idx, 'Price_In']) * 100
+                    df.at[idx, 'Gain_%'] = format_gain(gain)
+            
+            # 4. Update Current Price for Active items
+            else:
+                curr_p = get_current_price(ticker)
+                if curr_p:
+                    df.at[idx, 'Current_Price'] = curr_p
+                    gain = ((curr_p - df.at[idx, 'Price_In']) / df.at[idx, 'Price_In']) * 100
+                    df.at[idx, 'Gain_%'] = format_gain(gain)
 
+    # 5. Add NEW Tickers (Only if they aren't already Active)
+    active_tickers = df[df['Status'] == 'Active']['Ticker'].tolist()
     for ticker in current_tickers:
-        if ticker not in df[df['Status'] == 'Active']['Ticker'].values:
+        if ticker not in active_tickers:
             p_open = get_historical_open(ticker, today_str)
             curr_p = get_current_price(ticker)
             final_in = p_open if p_open else curr_p
             if final_in:
-                new_row = {'Ticker': ticker, 'Current_Price': curr_p, 'Gain_%': format_gain(0.0), 'Date_In': today_str, 'Price_In': final_in, 'Status': 'Active', 'Days_Held': 0}
+                new_row = {
+                    'Ticker': ticker, 'Current_Price': curr_p, 'Gain_%': format_gain(0.0), 
+                    'Date_In': today_str, 'Price_In': final_in, 'Status': 'Active', 
+                    'Days_Held': 0, 'Date_Out': None, 'Price_Out': None
+                }
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
     df[cols].to_csv(CSV_FILE, index=False)
