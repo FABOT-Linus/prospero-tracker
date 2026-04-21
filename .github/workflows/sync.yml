@@ -1,13 +1,11 @@
 name: Prospero Sync
 on:
-  # Automated schedule: 10am, 12pm, 2pm, 4pm ET (Monday-Friday)
-  # Note: GitHub uses UTC. 14, 16, 18, 20 UTC = 10, 12, 2, 4 ET
   schedule:
     - cron: '0 14,16,18,20 * * 1-5'
   workflow_dispatch:
     inputs:
       tickers:
-        description: 'Enter symbols (e.g., AAPL NVDA TSLA) or leave blank to use current active list'
+        description: 'Enter symbols (e.g., AAPL NVDA TSLA) or leave blank'
         required: false
 
 jobs:
@@ -29,18 +27,17 @@ jobs:
 
       - name: Run Tracker
         env:
-          # If manual input is empty, the script will handle reading the CSV
           PROSPERO_LIST: ${{ github.event.inputs.tickers }}
         run: |
           python prospero_tracker.py
           
+          # Create the Dashboard
           echo "### 📈 Prospero Active Signals" > README.md
           echo "Last Updated (Toronto): $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
           echo "" >> README.md
           echo "| Ticker | Current | Gain/Loss | Today's Date | Today | Date In | Price In | Days |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # Reading columns: 1=Ticker, 2=Current, 3=TotalGain, 4=TodayDate, 5=TodayGain, 6=DateIn, 7=PriceIn, 8=Days, 9=Status
           tail -n +2 signals.csv | while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
             if [ "$status" == "Active" ]; then
               echo "| **$ticker** | \$$current | $total | $tdate | $today | $date_in | \$$price_in | $days |" >> README.md
@@ -65,3 +62,16 @@ jobs:
           git add signals.csv README.md
           git commit -m "Automated Market Sync [Skip CI]" || exit 0
           git push
+
+      - name: Send Email Report
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: Prospero Signal Report - $(date +'%Y-%m-%d')
+          to: ${{ secrets.MAIL_USERNAME }}
+          from: Prospero Tracker
+          body: file://README.md
+          convert_markdown: true
