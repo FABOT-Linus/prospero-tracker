@@ -2,7 +2,6 @@ import pandas as pd
 import yfinance as yf
 from datetime import datetime
 import os
-import re
 
 CSV_FILE = 'signals.csv'
 
@@ -25,9 +24,8 @@ def main():
     raw_input = os.getenv('PROSPERO_LIST', '')
     input_items = [t.strip().upper() for t in raw_input.split() if t.strip()]
     
-    # Separate tickers to ADD and tickers to REMOVE (-)
-    tickers_to_add = [t for t in input_items if not t.startswith('-')]
-    tickers_to_remove = [t.lstrip('-') for t in input_items if t.startswith('-')]
+    tickers_to_activate = [t for t in input_items if not t.startswith('-')]
+    tickers_to_exit = [t.lstrip('-') for t in input_items if t.startswith('-')]
 
     cols = ['Ticker', 'Current_Price', 'Gain_Loss', 'Today_Date', 'Today_Gain', 'Date_In', 'Price_In', 'Days_Held', 'Status', 'Date_Out', 'Price_Out']
 
@@ -37,13 +35,24 @@ def main():
     else:
         df = pd.DataFrame(columns=cols)
 
+    for col in cols:
+        if col not in df.columns: df[col] = None
+
     now = datetime.now()
     today_str = now.strftime('%Y-%m-%d')
 
-    # 1. ADD NEW TICKERS (Additive logic)
-    for ticker in tickers_to_add:
-        # Only add if not already active
-        if df.empty or not ((df['Ticker'] == ticker) & (df['Status'] == 'Active')).any():
+    # 1. REACTIVATE OR ADD TICKERS
+    for ticker in tickers_to_activate:
+        # Check if ticker already exists in any status
+        mask = (df['Ticker'] == ticker)
+        if mask.any():
+            idx = df.index[mask][0]
+            # If it was closed, reopen it and clear exit data
+            df.at[idx, 'Status'] = 'Active'
+            df.at[idx, 'Date_Out'] = None
+            df.at[idx, 'Price_Out'] = None
+        else:
+            # Brand new ticker
             curr_p, today_open = get_price_data(ticker)
             if curr_p:
                 new_row = {
@@ -54,16 +63,17 @@ def main():
                 }
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
-    # 2. REMOVE TICKERS (The "-" logic)
-    for ticker in tickers_to_remove:
-        idx = df.index[(df['Ticker'] == ticker) & (df['Status'] == 'Active')]
-        if not idx.empty:
+    # 2. MANUAL EXIT ONLY (The "-" Logic)
+    for ticker in tickers_to_exit:
+        mask = (df['Ticker'] == ticker) & (df['Status'] == 'Active')
+        if mask.any():
+            idx = df.index[mask][0]
             curr_p, _ = get_price_data(ticker)
-            df.at[idx[0], 'Status'] = 'Closed'
-            df.at[idx[0], 'Date_Out'] = today_str
-            df.at[idx[0], 'Price_Out'] = curr_p
+            df.at[idx, 'Status'] = 'Closed'
+            df.at[idx, 'Date_Out'] = today_str
+            df.at[idx, 'Price_Out'] = curr_p
 
-    # 3. UPDATE ALL ACTIVE TICKERS
+    # 3. UPDATE ALL ACTIVE TICKERS (Including the ones we just reactivated)
     for idx, row in df.iterrows():
         if row['Status'] == 'Active':
             ticker = row['Ticker']
@@ -71,16 +81,16 @@ def main():
             
             try:
                 p_in = float(row['Price_In'])
+                if p_in == 0 or pd.isna(p_in): p_in = curr_p
             except:
-                p_in = curr_p # Fallback if price_in is missing
+                p_in = curr_p
 
             if curr_p:
                 df.at[idx, 'Current_Price'] = curr_p
                 df.at[idx, 'Today_Date'] = today_str
-                # Total Gain calculation
+                # Performance calculations
                 total_gain = ((curr_p - p_in) / p_in) * 100
                 df.at[idx, 'Gain_Loss'] = format_gain(total_gain)
-                # Today's Gain calculation
                 if today_open:
                     day_gain = ((curr_p - today_open) / today_open) * 100
                     df.at[idx, 'Today_Gain'] = format_gain(day_gain)
@@ -89,6 +99,9 @@ def main():
                 date_in_dt = pd.to_datetime(row['Date_In'])
                 df.at[idx, 'Days_Held'] = (now - date_in_dt).days
 
+    # Ensure Date_Out and Price_Out are empty for Active rows
+    df.loc[df['Status'] == 'Active', ['Date_Out', 'Price_Out']] = None
+    
     df.to_csv(CSV_FILE, index=False)
 
 if __name__ == "__main__":
