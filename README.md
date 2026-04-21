@@ -1,5 +1,5 @@
 ### 📈 Prospero Active Signals
-Last Updated (Toronto): 2026-04-21 14:44 EDT
+Last Updated (Toronto): 2026-04-21 15:12 EDT
 
 | Ticker | Current | Gain/Loss | Today | Date In | Price In | Days |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -17,7 +17,3 @@ Last Updated (Toronto): 2026-04-21 14:44 EDT
 | **SPOT** | $531.32 | 🔴 ▼ 1.61% | 🔴 ▼ 1.61% | 2026-04-21 | $540.0 | 0.0 |
 | **NOK** | $10.48 | 🔴 ▼ 1.13% | 🔴 ▼ 1.13% | 2026-04-21 | $10.6 | 0.0 |
 | **BABA** | $135.39 | 🔴 ▼ 2.77% | 🔴 ▼ 2.77% | 2026-04-21 | $139.25 | 0.0 |
-
-### 🏁 Exit History
-| Ticker | Exit Date | In Date | Days Held | In Price | Exit Price | Total Profit |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
