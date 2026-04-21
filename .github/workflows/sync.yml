@@ -36,9 +36,9 @@ jobs:
           echo "| Ticker | Current | Gain/Loss | Date In | Price In (Open) | Status | Days |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # Read the CSV (skipping header) and add to README
+          # Standard loop to build the table
           sed 1d signals.csv | while IFS=, read -r ticker current gain date_in price_in d_out p_out status days; do
-            echo "| **$ticker** | \$$current | $gain | $date_in | \$$price_in | $status | $days |" >> README.md
+            echo "| **$ticker** | \$$current | **$gain** | $date_in | \$$price_in | $status | $days |" >> README.md
           done
 
       - name: Save Changes
