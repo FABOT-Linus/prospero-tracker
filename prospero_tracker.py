@@ -30,12 +30,9 @@ def format_gain(gain_val):
     return f"{indicator} {abs(gain_val):.2f}%"
 
 def main():
-    # 1. Capture Input
     raw_input = os.getenv('PROSPERO_LIST', '')
-    manual_tickers = [t.strip().upper() for t in raw_input.split() if t.strip()]
     
-    cols = ['Ticker', 'Current_Price', 'Gain_Loss', 'Today_Date', 'Today_Gain', 'Date_In', 'Price_In', 'Days_Held', 'Status', 'Date_Out', 'Price_Out']
-
+    # Load Existing Data First
     if os.path.exists(CSV_FILE):
         try:
             df = pd.read_csv(CSV_FILE, skipinitialspace=True)
@@ -43,24 +40,29 @@ def main():
                 df[col] = df[col].astype(str).str.replace('"', '').str.strip()
             df['Ticker'] = df['Ticker'].str.upper()
         except:
-            df = pd.DataFrame(columns=cols)
+            df = pd.DataFrame()
     else:
-        df = pd.DataFrame(columns=cols)
+        df = pd.DataFrame()
 
+    # Determine Ticker List: 
+    # If user provided input, use that. Otherwise, use what is currently 'Active' in the CSV.
+    if raw_input and raw_input.strip():
+        current_tickers = [t.strip().upper() for t in raw_input.split() if t.strip()]
+        is_manual_override = True
+    else:
+        if not df.empty and 'Status' in df.columns:
+            current_tickers = df[df['Status'] == 'Active']['Ticker'].tolist()
+        else:
+            current_tickers = []
+        is_manual_override = False
+    
+    cols = ['Ticker', 'Current_Price', 'Gain_Loss', 'Today_Date', 'Today_Gain', 'Date_In', 'Price_In', 'Days_Held', 'Status', 'Date_Out', 'Price_Out']
     for col in cols:
         if col not in df.columns: df[col] = None
 
     now = datetime.now()
     today_str = now.strftime('%Y-%m-%d')
 
-    # 2. Determine who we are tracking
-    # If manual_tickers is empty (Scheduled run), we stay with currently 'Active' tickers in CSV.
-    if not manual_tickers:
-        target_tickers = df[df['Status'] == 'Active']['Ticker'].tolist()
-    else:
-        target_tickers = manual_tickers
-
-    # 3. Update Existing Data
     for idx, row in df.iterrows():
         ticker = row['Ticker']
         if not ticker or ticker == 'NAN' or ticker == 'TICKER': continue
@@ -76,8 +78,8 @@ def main():
                 p_in = h_open
                 df.at[idx, 'Price_In'] = h_open
 
-        # Sync Performance if ticker is in our target list
-        if ticker in target_tickers:
+        # Update Logic
+        if ticker in current_tickers:
             df.at[idx, 'Status'] = 'Active'
             df.at[idx, 'Today_Date'] = today_str
             curr_p, today_open = get_price_data(ticker)
@@ -94,18 +96,18 @@ def main():
             if pd.notnull(date_in_dt):
                 df.at[idx, 'Days_Held'] = float((now - date_in_dt).days)
         
-        else:
-            # Handle Exit ONLY if manual input was provided (otherwise it's just a routine update)
-            if manual_tickers and df.at[idx, 'Status'] == 'Active':
+        elif is_manual_override:
+            # Only exit tickers if the user explicitly provided a new list that excludes them
+            if df.at[idx, 'Status'] == 'Active':
                 curr_p, _ = get_price_data(ticker)
                 df.at[idx, 'Status'] = 'Closed'
                 df.at[idx, 'Date_Out'] = today_str
                 df.at[idx, 'Price_Out'] = curr_p
 
-    # 4. Add New Tickers (Manual only)
-    active_in_df = df[df['Status'] == 'Active']['Ticker'].tolist()
-    for ticker in manual_tickers:
-        if ticker not in active_in_df:
+    # Add New Tickers
+    active_list = df[df['Status'] == 'Active']['Ticker'].tolist() if not df.empty else []
+    for ticker in current_tickers:
+        if ticker not in active_list:
             curr_p, today_open = get_price_data(ticker)
             if curr_p:
                 new_row = {
