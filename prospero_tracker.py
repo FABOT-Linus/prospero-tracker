@@ -20,11 +20,12 @@ def get_historical_open(ticker, date_str):
         return None
 
 def format_gain(gain_val):
-    """Uses HTML for colors and Emojis for arrows (GitHub compatible)."""
-    arrow = "🟢 ▲" if gain_val >= 0 else "🔴 ▼"
-    color = "green" if gain_val >= 0 else "red"
-    # Returns a string like: <span style='color:green'>🟢 ▲ 1.25%</span>
-    return f"<span style='color:{color}'>{arrow} {abs(gain_val):.2f}%</span>"
+    """Uses shields.io badges for guaranteed color in GitHub tables."""
+    label = "UP" if gain_val >= 0 else "DOWN"
+    color = "success" if gain_val >= 0 else "critical" # Green vs Red
+    formatted_pct = f"{abs(gain_val):.2f}%25" # %25 is the URL code for %
+    # This creates a clean, colored badge image
+    return f"![Gain](https://img.shields.io/badge/{label}-{formatted_pct}-{color}?style=flat-square)"
 
 def main():
     raw_input = os.getenv('PROSPERO_LIST', '')
@@ -32,10 +33,7 @@ def main():
     if not current_tickers: return
 
     cols = ['Ticker', 'Current_Price', 'Gain_%', 'Date_In', 'Price_In', 'Date_Out', 'Price_Out', 'Status', 'Days_Held']
-    if os.path.exists(CSV_FILE):
-        df = pd.read_csv(CSV_FILE)
-    else:
-        df = pd.DataFrame(columns=cols)
+    df = pd.read_csv(CSV_FILE) if os.path.exists(CSV_FILE) else pd.DataFrame(columns=cols)
 
     now = datetime.now()
     today_str = now.strftime('%Y-%m-%d')
@@ -43,11 +41,10 @@ def main():
     for idx, row in df.iterrows():
         ticker = row['Ticker']
         
-        # Lock Price_In to the Open price of the entry date
+        # Lock Price_In to the Open price
         if pd.isna(row['Price_In']) or row['Price_In'] == 0 or row['Status'] == 'Active':
-             h_open = get_historical_open(ticker, row['Date_In'])
-             if h_open:
-                 df.at[idx, 'Price_In'] = h_open
+             h_open = get_historical_open(ticker, str(row['Date_In']))
+             if h_open: df.at[idx, 'Price_In'] = h_open
 
         date_in_dt = pd.to_datetime(row['Date_In'])
         end_date = now if row['Status'] == 'Active' else pd.to_datetime(row['Date_Out'])
@@ -73,14 +70,10 @@ def main():
             curr_p = get_current_price(ticker)
             final_in = p_open if p_open else curr_p
             if final_in:
-                new_row = {
-                    'Ticker': ticker, 'Current_Price': curr_p, 'Gain_%': format_gain(0.0), 
-                    'Date_In': today_str, 'Price_In': final_in, 'Status': 'Active', 'Days_Held': 0
-                }
+                new_row = {'Ticker': ticker, 'Current_Price': curr_p, 'Gain_%': format_gain(0.0), 'Date_In': today_str, 'Price_In': final_in, 'Status': 'Active', 'Days_Held': 0}
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
-    df = df[cols]
-    df.to_csv(CSV_FILE, index=False)
+    df[cols].to_csv(CSV_FILE, index=False)
 
 if __name__ == "__main__":
     main()
