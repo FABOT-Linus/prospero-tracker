@@ -31,12 +31,12 @@ jobs:
           
           # Build the Header
           echo "### 📈 Prospero Signal Dashboard" > README.md
-          echo "Last Updated: $(TZ='America/Toronto' date) (Toronto Time)" >> README.md
+          echo "Last Updated: $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
           echo "" >> README.md
           echo "| Ticker | Current | Gain/Loss | Date In | Price In (Open) | Status | Days |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # Standard loop to build the table
+          # Build the Table
           sed 1d signals.csv | while IFS=, read -r ticker current gain date_in price_in d_out p_out status days; do
             echo "| **$ticker** | \$$current | **$gain** | $date_in | \$$price_in | $status | $days |" >> README.md
           done
