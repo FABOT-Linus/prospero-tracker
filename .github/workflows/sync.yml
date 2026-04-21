@@ -34,11 +34,10 @@ jobs:
           echo "| Ticker | Current | Gain % | Date In | Price In (Open) | Status | Days |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          while IFS=, read -r ticker current gain date_in price_in d_out p_out status days; do
-            if [ "$ticker" != "Ticker" ]; then
-              echo "| **$ticker** | \$$current | $gain | $date_in | \$$price_in | $status | $days |" >> README.md
-            fi
-          done < signals.csv
+          # This loop reads the CSV properly and populates the README
+          tail -n +2 signals.csv | while IFS=, read -r ticker current gain date_in price_in d_out p_out status days; do
+            echo "| **$ticker** | \$$current | $gain | $date_in | \$$price_in | $status | $days |" >> README.md
+          done
 
       - name: Save Changes
         run: |
