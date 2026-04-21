@@ -29,42 +29,46 @@ def main():
     raw_input = os.getenv('PROSPERO_LIST', '')
     current_tickers = [t.strip().upper() for t in raw_input.split() if t.strip()]
     
+    # The exact columns you requested
     cols = ['Ticker', 'Current_Price', 'Gain_Loss', 'Date_In', 'Price_In', 'Days_Held', 'Status']
 
     if os.path.exists(CSV_FILE):
-        df = pd.read_csv(CSV_FILE)
-        df['Ticker'] = df['Ticker'].astype(str).str.replace('"', '').str.strip().upper()
+        try:
+            df = pd.read_csv(CSV_FILE)
+            # Force cleanup of Ticker names (remove quotes/whitespace)
+            df['Ticker'] = df['Ticker'].astype(str).str.replace('"', '').str.strip().upper()
+            # If the CSV structure was broken, this ensures we only keep the columns we need
+            df = df[[c for c in df.columns if c in cols]]
+        except Exception:
+            # If the CSV is too messy to read, start fresh
+            df = pd.DataFrame(columns=cols)
     else:
         df = pd.DataFrame(columns=cols)
 
     now = datetime.now()
     today_str = now.strftime('%Y-%m-%d')
 
+    # Update Logic
     for idx, row in df.iterrows():
         ticker = row['Ticker']
         
-        # --- FORCE NUMERIC ---
-        price_in = pd.to_numeric(row.get('Price_In'), errors='coerce') or 0.0
-        
-        # If Price_In is 0 (or missing), fetch the historical Open
-        if price_in == 0:
+        # Lock Entry Price
+        if pd.isna(row.get('Price_In')) or row.get('Price_In') == 0:
             h_open = get_historical_open(ticker, row['Date_In'])
-            if h_open: 
-                price_in = h_open
-                df.at[idx, 'Price_In'] = h_open
+            if h_open: df.at[idx, 'Price_In'] = h_open
 
         # Update Days Held
         date_in_dt = pd.to_datetime(row['Date_In'], errors='coerce')
         if pd.notnull(date_in_dt):
-            df.at[idx, 'Days_Held'] = float((now - date_in_dt).days)
+            df.at[idx, 'Days_Held'] = (now - date_in_dt).days
 
+        # Sync Active status
         if ticker in current_tickers:
             df.at[idx, 'Status'] = 'Active'
             curr_p = get_current_price(ticker)
-            if curr_p and price_in > 0:
+            if curr_p and df.at[idx, 'Price_In'] > 0:
                 df.at[idx, 'Current_Price'] = curr_p
-                # MATH CALCULATION
-                gain = ((float(curr_p) - float(price_in)) / float(price_in)) * 100
+                gain = ((curr_p - df.at[idx, 'Price_In']) / df.at[idx, 'Price_In']) * 100
                 df.at[idx, 'Gain_Loss'] = format_gain(gain)
         else:
             df.at[idx, 'Status'] = 'Closed'
@@ -79,10 +83,11 @@ def main():
             if final_in:
                 new_row = {
                     'Ticker': ticker, 'Current_Price': curr_p, 'Gain_Loss': format_gain(0.0),
-                    'Date_In': today_str, 'Price_In': final_in, 'Days_Held': 0.0, 'Status': 'Active'
+                    'Date_In': today_str, 'Price_In': final_in, 'Days_Held': 0, 'Status': 'Active'
                 }
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
+    # Final Deduplication & Column Sort
     df = df.drop_duplicates(subset=['Ticker'], keep='first')
     df[cols].to_csv(CSV_FILE, index=False)
 
