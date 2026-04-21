@@ -1,13 +1,13 @@
 name: Prospero Sync
 on:
   schedule:
-    # Runs at 42 minutes past the hour
-    # 13 UTC (9:42 AM ET) through 20 UTC (4:42 PM ET)
-    - cron: '42 13-20 * * 1-5'
+    # 37 minutes past the hour, 9am to 4pm ET
+    - cron: '37 9-16 * * 1-5'
+      timezone: "America/New_York"
   workflow_dispatch:
     inputs:
       tickers:
-        description: 'Add: AAPL TSLA | Remove: -VEEV'
+        description: 'Add: AAPL | Remove: -VEEV'
         required: false
 
 jobs:
