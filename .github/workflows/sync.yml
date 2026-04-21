@@ -1,36 +1,10 @@
-name: Prospero Sync
-on:
-  schedule:
-    - cron: '0 14,16,18,20 * * 1-5'
-  workflow_dispatch:
-    inputs:
-      tickers:
-        description: 'Enter symbols or leave blank'
-        required: false
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install Libs
-        run: pip install pandas yfinance
-
-      - name: Run Tracker
+- name: Run Tracker
         env:
           PROSPERO_LIST: ${{ github.event.inputs.tickers }}
         run: |
           python prospero_tracker.py
           
+          # 1. Create the standard README for GitHub
           echo "### 📈 Prospero Active Signals" > README.md
           echo "Last Updated (Toronto): $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
           echo "" >> README.md
@@ -43,16 +17,18 @@ jobs:
             fi
           done
 
-          echo "" >> README.md
-          echo "### 🏁 Exit History" >> README.md
-          echo "| Ticker | Exit Date | Exit Price | Total Performance |" >> README.md
-          echo "| :--- | :--- | :--- | :--- |" >> README.md
-
+          # 2. Create a clean HTML version for the Email
+          echo "<html><body><h3>📈 Prospero Signal Report</h3>" > email.html
+          echo "<p>Last Updated (Toronto): $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')</p>" >> email.html
+          echo "<table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'>" >> email.html
+          echo "<tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Price</th><th>Total Gain</th><th>Date</th><th>Today</th><th>In Date</th><th>In Price</th><th>Days</th></tr>" >> email.html
+          
           tail -n +2 signals.csv | while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
-            if [ "$status" == "Closed" ]; then
-              echo "| $ticker | $d_out | \$$p_out | $total |" >> README.md
+            if [ "$status" == "Active" ]; then
+              echo "<tr><td>$ticker</td><td>\$$current</td><td>$total</td><td>$tdate</td><td>$today</td><td>$date_in</td><td>\$$price_in</td><td>$days</td></tr>" >> email.html
             fi
           done
+          echo "</table></body></html>" >> email.html
 
       - name: Save Changes
         run: |
@@ -72,5 +48,5 @@ jobs:
           subject: Prospero Signal Report - $(date +'%Y-%m-%d')
           to: linus.chen1984@gmail.com
           from: Prospero Tracker <linus.chen1984@gmail.com>
-          body: file://README.md
-          convert_markdown: true
+          # We tell it to use the new HTML file we just created
+          html_body: file://email.html
