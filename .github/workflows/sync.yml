@@ -1,11 +1,13 @@
 name: Prospero Sync
 on:
+  # Automated schedule: 10am to 4pm ET (Monday-Friday) every hour
+  # 14 UTC to 20 UTC corresponds to 10am to 4pm ET
   schedule:
-    - cron: '0 14,16,18,20 * * 1-5'
+    - cron: '0 14-20 * * 1-5'
   workflow_dispatch:
     inputs:
       tickers:
-        description: 'Add: AAPL TSLA | Remove: -VEEV -DASH'
+        description: 'Add: AAPL TSLA | Remove: -VEEV'
         required: false
 
 jobs:
@@ -31,16 +33,17 @@ jobs:
         run: |
           python prospero_tracker.py
           
-          # Generate README
+          # 1. Generate README (GitHub View)
           echo "### 📈 Prospero Active Signals" > README.md
           echo "Last Updated (Toronto): $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
           echo "" >> README.md
           echo "| Ticker | Current | Gain/Loss | Today | Date In | Price In | Days |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # Generate Email HTML
-          echo "<html><body><h3>📈 Prospero Signal Report</h3><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Price</th><th>Total Gain</th><th>Today</th><th>In Date</th><th>In Price</th><th>Days</th></tr>" > email.html
+          # 2. Start Email HTML
+          echo "<html><body><h3>📈 Prospero Signal Report</h3><p>Last Updated: $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M')</p><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Price</th><th>Total Gain</th><th>Today</th><th>In Date</th><th>In Price</th><th>Days</th></tr>" > email.html
 
+          # 3. Populate README and Email
           while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
             if [ "$status" == "Active" ]; then
               echo "| **$ticker** | \$$current | $total | $today | $date_in | \$$price_in | $days |" >> README.md
@@ -62,7 +65,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add signals.csv README.md
-          git commit -m "Manual Update/Automated Sync [Skip CI]" || exit 0
+          git commit -m "Automated Market Sync [Skip CI]" || exit 0
           git push
 
       - name: Send Email Report
@@ -72,7 +75,7 @@ jobs:
           server_port: 465
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: Prospero Signal Report - $(date +'%Y-%m-%d')
+          subject: Prospero Signal Report - $(date +'%Y-%m-%d %H:%M')
           to: linus.chen1984@gmail.com
           from: Prospero Tracker <linus.chen1984@gmail.com>
           html_body: file://email.html
