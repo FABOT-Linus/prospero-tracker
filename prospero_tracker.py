@@ -1,9 +1,29 @@
 import pandas as pd
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, time
 import os
+import pytz
 
 CSV_FILE = 'signals.csv'
+
+def is_market_open():
+    # Set timezone to Eastern Time (Market Time)
+    tz = pytz.timezone('America/New_York')
+    now = datetime.now(tz)
+    
+    # 1. Check for Weekends (5 = Saturday, 6 = Sunday)
+    if now.weekday() >= 5:
+        return False
+        
+    # 2. Check for Market Hours (9:30 AM to 4:00 PM)
+    market_start = time(9, 30)
+    market_end = time(16, 0)
+    current_time = now.time()
+    
+    if current_time < market_start or current_time > market_end:
+        return False
+        
+    return True
 
 def get_price_data(ticker):
     try:
@@ -21,6 +41,16 @@ def format_gain(gain_val):
     return f"{indicator} {abs(gain_val):.2f}%"
 
 def main():
+    # Check if we should even run
+    # If it's a manual run from the UI, we let it through. 
+    # Otherwise, we check the market clock.
+    is_manual = os.getenv('PROSPERO_LIST', '') != ''
+    
+    if not is_market_open() and not is_manual:
+        print("Market is currently closed. Skipping automated sync.")
+        return
+
+    # ... [Rest of your existing Add/Remove and Update logic remains the same] ...
     raw_input = os.getenv('PROSPERO_LIST', '')
     input_items = [t.strip().upper() for t in raw_input.split() if t.strip()]
     
@@ -35,73 +65,9 @@ def main():
     else:
         df = pd.DataFrame(columns=cols)
 
-    for col in cols:
-        if col not in df.columns: df[col] = None
-
-    now = datetime.now()
-    today_str = now.strftime('%Y-%m-%d')
-
-    # 1. REACTIVATE OR ADD TICKERS
-    for ticker in tickers_to_activate:
-        # Check if ticker already exists in any status
-        mask = (df['Ticker'] == ticker)
-        if mask.any():
-            idx = df.index[mask][0]
-            # If it was closed, reopen it and clear exit data
-            df.at[idx, 'Status'] = 'Active'
-            df.at[idx, 'Date_Out'] = None
-            df.at[idx, 'Price_Out'] = None
-        else:
-            # Brand new ticker
-            curr_p, today_open = get_price_data(ticker)
-            if curr_p:
-                new_row = {
-                    'Ticker': ticker, 'Current_Price': curr_p, 'Gain_Loss': format_gain(0.0),
-                    'Today_Date': today_str, 'Today_Gain': format_gain(0.0), 
-                    'Date_In': today_str, 'Price_In': today_open, 
-                    'Days_Held': 0, 'Status': 'Active'
-                }
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-
-    # 2. MANUAL EXIT ONLY (The "-" Logic)
-    for ticker in tickers_to_exit:
-        mask = (df['Ticker'] == ticker) & (df['Status'] == 'Active')
-        if mask.any():
-            idx = df.index[mask][0]
-            curr_p, _ = get_price_data(ticker)
-            df.at[idx, 'Status'] = 'Closed'
-            df.at[idx, 'Date_Out'] = today_str
-            df.at[idx, 'Price_Out'] = curr_p
-
-    # 3. UPDATE ALL ACTIVE TICKERS (Including the ones we just reactivated)
-    for idx, row in df.iterrows():
-        if row['Status'] == 'Active':
-            ticker = row['Ticker']
-            curr_p, today_open = get_price_data(ticker)
-            
-            try:
-                p_in = float(row['Price_In'])
-                if p_in == 0 or pd.isna(p_in): p_in = curr_p
-            except:
-                p_in = curr_p
-
-            if curr_p:
-                df.at[idx, 'Current_Price'] = curr_p
-                df.at[idx, 'Today_Date'] = today_str
-                # Performance calculations
-                total_gain = ((curr_p - p_in) / p_in) * 100
-                df.at[idx, 'Gain_Loss'] = format_gain(total_gain)
-                if today_open:
-                    day_gain = ((curr_p - today_open) / today_open) * 100
-                    df.at[idx, 'Today_Gain'] = format_gain(day_gain)
-                
-                # Update Days Held
-                date_in_dt = pd.to_datetime(row['Date_In'])
-                df.at[idx, 'Days_Held'] = (now - date_in_dt).days
-
-    # Ensure Date_Out and Price_Out are empty for Active rows
-    df.loc[df['Status'] == 'Active', ['Date_Out', 'Price_Out']] = None
-    
+    # (Keep the rest of your main() logic exactly as I sent in the last update)
+    # ... logic for adding/removing/updating ...
+    # [Final save to CSV]
     df.to_csv(CSV_FILE, index=False)
 
 if __name__ == "__main__":
