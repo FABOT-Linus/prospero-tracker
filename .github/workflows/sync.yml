@@ -43,7 +43,7 @@ jobs:
           # 2. Start Email HTML
           echo "<html><body><h3>📈 Prospero Signal Report</h3><p>Last Updated: $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M')</p><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Price</th><th>Total Gain</th><th>Today</th><th>In Date</th><th>In Price</th><th>Days</th></tr>" > email.html
 
-          # 3. Populate README and Email
+          # 3. Populate Active Section
           while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
             if [ "$status" == "Active" ]; then
               echo "| **$ticker** | \$$current | $total | $today | $date_in | \$$price_in | $days |" >> README.md
@@ -51,13 +51,24 @@ jobs:
             fi
           done < <(tail -n +2 signals.csv)
 
-          echo "</table><br><h3>🏁 Exit History</h3><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Exit Date</th><th>Exit Price</th><th>Total Perf.</th></tr>" >> email.html
+          # 4. Generate Exit History (README)
+          echo "" >> README.md
+          echo "### 🏁 Exit History" >> README.md
+          echo "| Ticker | Exit Date | In Date | Days Held | In Price | Exit Price | Total Profit |" >> README.md
+          echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
+
+          # 5. Generate Exit History (Email)
+          echo "</table><br><h3>🏁 Exit History</h3><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Exit Date</th><th>In Date</th><th>Days Held</th><th>In Price</th><th>Exit Price</th><th>Total Profit</th></tr>" >> email.html
           
+          # 6. Populate Exit History
+          # Order: Ticker(1), Exit Date(10), In Date(6), Days(8), In Price(7), Exit Price(11), Total(3)
           while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
             if [ "$status" == "Closed" ]; then
-              echo "<tr><td>$ticker</td><td>$d_out</td><td>\$$p_out</td><td>$total</td></tr>" >> email.html
+              echo "| $ticker | $d_out | $date_in | $days | \$$price_in | \$$p_out | $total |" >> README.md
+              echo "<tr><td>$ticker</td><td>$d_out</td><td>$date_in</td><td>$days</td><td>\$$price_in</td><td>\$$p_out</td><td>$total</td></tr>" >> email.html
             fi
           done < <(tail -n +2 signals.csv)
+          
           echo "</table></body></html>" >> email.html
 
       - name: Save Changes
