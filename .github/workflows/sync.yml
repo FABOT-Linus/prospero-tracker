@@ -28,14 +28,16 @@ jobs:
           PROSPERO_LIST: ${{ github.event.inputs.tickers }}
         run: |
           python prospero_tracker.py
+          
+          # Build the Header
           echo "### 📈 Prospero Signal Dashboard" > README.md
-          echo "Last Updated (EST): $(TZ='America/Toronto' date) " >> README.md
+          echo "Last Updated: $(TZ='America/Toronto' date) (Toronto Time)" >> README.md
           echo "" >> README.md
-          echo "| Ticker | Current | Gain % | Date In | Price In (Open) | Status | Days |" >> README.md
+          echo "| Ticker | Current | Gain/Loss | Date In | Price In (Open) | Status | Days |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # This loop reads the CSV properly and populates the README
-          tail -n +2 signals.csv | while IFS=, read -r ticker current gain date_in price_in d_out p_out status days; do
+          # Read the CSV (skipping header) and add to README
+          sed 1d signals.csv | while IFS=, read -r ticker current gain date_in price_in d_out p_out status days; do
             echo "| **$ticker** | \$$current | $gain | $date_in | \$$price_in | $status | $days |" >> README.md
           done
 
@@ -44,5 +46,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add signals.csv README.md
-          git commit -m "Sync: ${{ github.event.inputs.tickers }}" || exit 0
+          git commit -m "Sync Dashboard: ${{ github.event.inputs.tickers }}" || exit 0
           git push
