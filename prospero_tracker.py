@@ -7,7 +7,6 @@ import re
 CSV_FILE = 'signals.csv'
 
 def get_price_data(ticker):
-    """Fetches latest price and today's open in one call."""
     try:
         data = yf.download(ticker, period='1d', interval='1m', progress=False)
         if not data.empty:
@@ -34,8 +33,7 @@ def main():
     raw_input = os.getenv('PROSPERO_LIST', '')
     current_tickers = [t.strip().upper() for t in raw_input.split() if t.strip()]
     
-    # New column order including Today's Gain
-    cols = ['Ticker', 'Current_Price', 'Gain_Loss', 'Today_Gain', 'Date_In', 'Price_In', 'Days_Held', 'Status']
+    cols = ['Ticker', 'Current_Price', 'Gain_Loss', 'Today_Date', 'Today_Gain', 'Date_In', 'Price_In', 'Days_Held', 'Status', 'Date_Out', 'Price_Out']
 
     if os.path.exists(CSV_FILE):
         try:
@@ -56,9 +54,9 @@ def main():
 
     for idx, row in df.iterrows():
         ticker = row['Ticker']
-        if not ticker or ticker == 'NAN': continue
+        if not ticker or ticker == 'NAN' or ticker == 'TICKER': continue
 
-        # 1. LOCK ORIGINAL DATA: Only fetch Price_In if it's missing or 0
+        # Lock historical opening price if missing
         try:
             p_in = float(row['Price_In'])
         except:
@@ -70,30 +68,34 @@ def main():
                 p_in = h_open
                 df.at[idx, 'Price_In'] = h_open
 
-        # 2. UPDATE LIVE PERFORMANCE
+        # LOGIC: Handle Active vs. Exit
         if ticker in current_tickers:
             df.at[idx, 'Status'] = 'Active'
+            df.at[idx, 'Today_Date'] = today_str
             curr_p, today_open = get_price_data(ticker)
             
             if curr_p and p_in > 0:
                 df.at[idx, 'Current_Price'] = curr_p
-                # Total Gain (Since Date_In)
                 total_gain = ((curr_p - p_in) / p_in) * 100
                 df.at[idx, 'Gain_Loss'] = format_gain(total_gain)
                 
-                # Today's Gain (Since today's market open)
                 if today_open:
                     day_gain = ((curr_p - today_open) / today_open) * 100
                     df.at[idx, 'Today_Gain'] = format_gain(day_gain)
 
-            # Update Days Held
             date_in_dt = pd.to_datetime(row['Date_In'], errors='coerce')
             if pd.notnull(date_in_dt):
                 df.at[idx, 'Days_Held'] = float((now - date_in_dt).days)
+        
         else:
-            df.at[idx, 'Status'] = 'Closed'
+            # TICKER EXIT: If it was active but isn't in the new list
+            if df.at[idx, 'Status'] == 'Active':
+                curr_p, _ = get_price_data(ticker)
+                df.at[idx, 'Status'] = 'Closed'
+                df.at[idx, 'Date_Out'] = today_str
+                df.at[idx, 'Price_Out'] = curr_p
 
-    # 3. ADD BRAND NEW TICKERS ONLY
+    # ADD NEW TICKERS
     active_list = df[df['Status'] == 'Active']['Ticker'].tolist()
     for ticker in current_tickers:
         if ticker not in active_list:
@@ -101,12 +103,13 @@ def main():
             if curr_p:
                 new_row = {
                     'Ticker': ticker, 'Current_Price': curr_p, 'Gain_Loss': format_gain(0.0),
-                    'Today_Gain': format_gain(0.0), 'Date_In': today_str, 'Price_In': today_open, 
+                    'Today_Date': today_str, 'Today_Gain': format_gain(0.0), 
+                    'Date_In': today_str, 'Price_In': today_open, 
                     'Days_Held': 0.0, 'Status': 'Active'
                 }
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
-    df = df.drop_duplicates(subset=['Ticker'], keep='first')
+    df = df.drop_duplicates(subset=['Ticker', 'Status'], keep='first')
     df[cols].to_csv(CSV_FILE, index=False)
 
 if __name__ == "__main__":
