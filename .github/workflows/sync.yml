@@ -13,10 +13,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4 # Updated
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v5 # Updated
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -32,13 +32,13 @@ jobs:
           echo "### 📈 Prospero Signal Dashboard" > README.md
           echo "Last Updated (Toronto): $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
           echo "" >> README.md
-          echo "| Ticker | Current | Gain/Loss | Date In | Price In (Open) | Days |" >> README.md
-          echo "| :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
+          echo "| Ticker | Current | Gain/Loss | Today | Date In | Price In | Days |" >> README.md
+          echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # Reading columns safely
-          tail -n +2 signals.csv | while IFS=, read -r ticker current gain date_in price_in days status; do
+          # Reading columns: 1=Ticker, 2=Current, 3=TotalGain, 4=TodayGain, 5=DateIn, 6=PriceIn, 7=Days, 8=Status
+          tail -n +2 signals.csv | while IFS=, read -r ticker current total today date_in price_in days status; do
             if [ "$status" == "Active" ]; then
-              echo "| **$ticker** | \$$current | $gain | $date_in | \$$price_in | $days |" >> README.md
+              echo "| **$ticker** | \$$current | $total | $today | $date_in | \$$price_in | $days |" >> README.md
             fi
           done
 
@@ -47,5 +47,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add signals.csv README.md
-          git commit -m "Node24 Update & Crash Fix" || exit 0
+          git commit -m "Add Today Gain and Permanent Lock" || exit 0
           git push
