@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tickers:
-        description: 'Enter symbols or leave blank'
+        description: 'Add: AAPL TSLA | Remove: -VEEV -DASH'
         required: false
 
 jobs:
@@ -31,37 +31,30 @@ jobs:
         run: |
           python prospero_tracker.py
           
-          # 1. Generate README (GitHub View)
+          # Generate README
           echo "### 📈 Prospero Active Signals" > README.md
           echo "Last Updated (Toronto): $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
           echo "" >> README.md
-          echo "| Ticker | Current | Gain/Loss | Today's Date | Today | Date In | Price In | Days |" >> README.md
-          echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
+          echo "| Ticker | Current | Gain/Loss | Today | Date In | Price In | Days |" >> README.md
+          echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # 2. Start Email HTML
-          echo "<html><body><h3>📈 Prospero Signal Report</h3><p>Last Updated: $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M')</p><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Price</th><th>Total Gain</th><th>Today</th><th>In Date</th><th>In Price</th><th>Days</th></tr>" > email.html
+          # Generate Email HTML
+          echo "<html><body><h3>📈 Prospero Signal Report</h3><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Price</th><th>Total Gain</th><th>Today</th><th>In Date</th><th>In Price</th><th>Days</th></tr>" > email.html
 
-          # 3. Read CSV and populate both README and Email
-          # We use -F, to strictly define the comma as the separator
           while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
             if [ "$status" == "Active" ]; then
-              # Append to README
-              echo "| **$ticker** | \$$current | $total | $tdate | $today | $date_in | \$$price_in | $days |" >> README.md
-              # Append to Email
+              echo "| **$ticker** | \$$current | $total | $today | $date_in | \$$price_in | $days |" >> README.md
               echo "<tr><td><b>$ticker</b></td><td>\$$current</td><td>$total</td><td>$today</td><td>$date_in</td><td>\$$price_in</td><td>$days</td></tr>" >> email.html
             fi
           done < <(tail -n +2 signals.csv)
 
-          echo "</table><br><h3>🏁 Exit History</h3>" >> email.html
-          echo "<table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Exit Date</th><th>Exit Price</th><th>Total Performance</th></tr>" >> email.html
+          echo "</table><br><h3>🏁 Exit History</h3><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Exit Date</th><th>Exit Price</th><th>Total Perf.</th></tr>" >> email.html
           
-          # 4. Populate Exit History
           while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
             if [ "$status" == "Closed" ]; then
               echo "<tr><td>$ticker</td><td>$d_out</td><td>\$$p_out</td><td>$total</td></tr>" >> email.html
             fi
           done < <(tail -n +2 signals.csv)
-          
           echo "</table></body></html>" >> email.html
 
       - name: Save Changes
@@ -69,7 +62,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add signals.csv README.md
-          git commit -m "Automated Market Sync [Skip CI]" || exit 0
+          git commit -m "Manual Update/Automated Sync [Skip CI]" || exit 0
           git push
 
       - name: Send Email Report
