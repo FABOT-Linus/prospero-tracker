@@ -32,11 +32,8 @@ def main():
     cols = ['Ticker', 'Current_Price', 'Gain_Loss', 'Date_In', 'Price_In', 'Days_Held', 'Status']
 
     if os.path.exists(CSV_FILE):
-        try:
-            df = pd.read_csv(CSV_FILE)
-            df['Ticker'] = df['Ticker'].astype(str).str.replace('"', '').str.strip().upper()
-        except:
-            df = pd.DataFrame(columns=cols)
+        df = pd.read_csv(CSV_FILE)
+        df['Ticker'] = df['Ticker'].astype(str).str.replace('"', '').str.strip().upper()
     else:
         df = pd.DataFrame(columns=cols)
 
@@ -46,27 +43,33 @@ def main():
     for idx, row in df.iterrows():
         ticker = row['Ticker']
         
-        # Lock Entry Price (especially if we set it to 0 for backdating)
-        if pd.isna(row.get('Price_In')) or row.get('Price_In') == 0:
+        # --- FORCE NUMERIC ---
+        price_in = pd.to_numeric(row.get('Price_In'), errors='coerce') or 0.0
+        
+        # If Price_In is 0 (or missing), fetch the historical Open
+        if price_in == 0:
             h_open = get_historical_open(ticker, row['Date_In'])
-            if h_open: df.at[idx, 'Price_In'] = h_open
+            if h_open: 
+                price_in = h_open
+                df.at[idx, 'Price_In'] = h_open
 
-        # Update Days Held (Rounded)
+        # Update Days Held
         date_in_dt = pd.to_datetime(row['Date_In'], errors='coerce')
         if pd.notnull(date_in_dt):
-            diff = (now - date_in_dt).days
-            df.at[idx, 'Days_Held'] = float(diff)
+            df.at[idx, 'Days_Held'] = float((now - date_in_dt).days)
 
         if ticker in current_tickers:
             df.at[idx, 'Status'] = 'Active'
             curr_p = get_current_price(ticker)
-            if curr_p and df.at[idx, 'Price_In'] > 0:
+            if curr_p and price_in > 0:
                 df.at[idx, 'Current_Price'] = curr_p
-                gain = ((curr_p - df.at[idx, 'Price_In']) / df.at[idx, 'Price_In']) * 100
+                # MATH CALCULATION
+                gain = ((float(curr_p) - float(price_in)) / float(price_in)) * 100
                 df.at[idx, 'Gain_Loss'] = format_gain(gain)
         else:
             df.at[idx, 'Status'] = 'Closed'
 
+    # Add New Tickers
     active_in_df = df[df['Status'] == 'Active']['Ticker'].tolist()
     for ticker in current_tickers:
         if ticker not in active_in_df:
