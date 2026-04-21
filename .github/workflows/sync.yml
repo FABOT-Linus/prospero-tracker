@@ -29,20 +29,24 @@ jobs:
         run: |
           python prospero_tracker.py
           
-          # Build Dashboard with new column order
+          # Dashboard Header
           echo "### 📈 Prospero Signal Dashboard" > README.md
           echo "Last Updated: $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
           echo "" >> README.md
           echo "| Ticker | Current | Gain/Loss | Date In | Price In (Open) | Days |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # awk to pull columns in your order: $1=Ticker, $2=Current, $3=Gain, $4=DateIn, $5=PriceIn, $6=Days
-          tail -n +2 signals.csv | awk -F, '{print "| **" $1 "** | $" $2 " | " $3 " | " $4 " | $" $5 " | " $6 " |"}' >> README.md
+          # Use CSV columns: 1=Ticker, 2=Current, 3=Gain, 4=DateIn, 5=PriceIn, 6=Days
+          tail -n +2 signals.csv | while IFS=, read -r ticker current gain date_in price_in days rest; do
+            if [ "$ticker" != "" ]; then
+              echo "| **$ticker** | \$$current | $gain | $date_in | \$$price_in | $days |" >> README.md
+            fi
+          done
 
       - name: Save Changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add signals.csv README.md
-          git commit -m "Clean Sync: ${{ github.event.inputs.tickers }}" || exit 0
+          git commit -m "Fix & Sync: ${{ github.event.inputs.tickers }}" || exit 0
           git push
