@@ -1,85 +1,70 @@
-name: Prospero Sync
-on:
-  schedule:
-    - cron: '42 13-20 * * 1-5'
-  workflow_dispatch:
-    inputs:
-      tickers:
-        description: 'Add: AAPL | Remove: -VEEV'
-        required: false
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install Libs
-        run: pip install pandas yfinance pytz
-
-      - name: Run Tracker
+- name: Run Tracker
         env:
           PROSPERO_LIST: ${{ github.event.inputs.tickers }}
+          # We need these for the JS trigger to work
+          GH_TOKEN: ${{ secrets.DASHBOARD_PAT }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
         run: |
           python prospero_tracker.py
           
-          # 1. Generate README (GitHub View)
-          echo "### 📈 Prospero Active Signals" > README.md
-          echo "Last Updated (Toronto): $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
-          echo "" >> README.md
-          echo "| Ticker | Total Gain | Current Price | Price In | Today's Gain | Date In | Days Held |" >> README.md
-          echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
-          
-          # 2. Start Dashboard (index.html)
-          echo "<html><head><meta http-equiv='refresh' content='60'><title>Prospero Dashboard</title><style>body { font-family: -apple-system, sans-serif; background: #f4f7f6; padding: 20px; } .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 1000px; margin: auto; } table { width: 100%; border-collapse: collapse; } th { text-align: left; background: #f8f9fa; padding: 12px; border-bottom: 2px solid #eee; } td { padding: 12px; border-bottom: 1px solid #eee; } .positive { color: #28a745; font-weight: bold; } .negative { color: #dc3545; font-weight: bold; } .footer { font-size: 12px; color: #888; margin-top: 20px; text-align: center; }</style></head><body><div class='card'><h2>📈 Prospero Live Signals</h2><table><tr><th>Ticker</th><th>Total Gain</th><th>Current Price</th><th>Price In</th><th>Today's Gain</th><th>Date In</th><th>Days</th></tr>" > index.html
+          # Create the Interactive Dashboard
+          echo "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>
+          <title>Prospero Control</title>
+          <style>
+            body { font-family: -apple-system, sans-serif; background: #f4f7f6; padding: 20px; }
+            .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
+            .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
+            input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
+            button { padding: 12px 20px; background: #007aff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; }
+            th { text-align: left; background: #f8f9fa; padding: 12px; border-bottom: 2px solid #eee; }
+            td { padding: 12px; border-bottom: 1px solid #eee; }
+            .positive { color: #28a745; font-weight: bold; }
+            .negative { color: #dc3545; font-weight: bold; }
+          </style>
+          <script>
+            async function triggerSync(actionType) {
+              const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+              if (!ticker) return alert('Enter a ticker');
+              
+              const payload = actionType === 'add' ? ticker : '-' + ticker;
+              const btn = document.getElementById(actionType + 'Btn');
+              btn.innerText = 'Syncing...';
+              
+              // Trigger GitHub Action via API
+              const response = await fetch('https://api.github.com/repos/${{ github.repository }}/actions/workflows/sync.yml/dispatches', {
+                method: 'POST',
+                headers: {
+                  'Authorization': 'Bearer ${{ secrets.DASHBOARD_PAT }}',
+                  'Accept': 'application/vnd.github.v3+json'
+                },
+                body: JSON.stringify({ ref: 'main', inputs: { tickers: payload } })
+              });
 
-          # 3. Start Email
-          echo "<html><body><h3>📈 Prospero Signal Report</h3><p>Last Updated: $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M')</p><table border='1' style='border-collapse: collapse; width: 100%;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Total Gain</th><th>Current Price</th><th>Price In</th><th>Today's Gain</th><th>Date In</th><th>Days</th></tr>" > email.html
+              if (response.ok) {
+                alert('Success! Dashboard will update in ~60 seconds.');
+                location.reload();
+              } else {
+                alert('Error triggering sync. Check your PAT token.');
+              }
+            }
+          </script>
+          </head><body><div class='card'>
+          <h2>🎮 Prospero Control Center</h2>
+          <div class='input-group'>
+            <input type='text' id='tickerInput' placeholder='Ticker (e.g. NVDA)'>
+            <button id='addBtn' onclick=\"triggerSync('add')\">Add/Update</button>
+            <button id='removeBtn' onclick=\"triggerSync('remove')\" style='background:#ff3b30;'>Exit</button>
+          </div>
+          <table><tr><th>Ticker</th><th>Total Gain</th><th>Current Price</th><th>Today</th></tr>" > index.html
 
-          # 4. Populate Active Section
           if [ -f signals.csv ]; then
             while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
               if [ "$status" == "Active" ]; then
-                color_class="positive"
-                if [[ "$total" == *"🔴"* ]]; then color_class="negative"; fi
-                
-                # Update README
-                echo "| **$ticker** | $total | \$$current | \$$price_in | $today | $date_in | $days |" >> README.md
-                # Update Dashboard
-                echo "<tr><td><b>$ticker</b></td><td class='$color_class'>$total</td><td>\$$current</td><td>\$$price_in</td><td>$today</td><td>$date_in</td><td>$days</td></tr>" >> index.html
-                # Update Email
-                echo "<tr><td><b>$ticker</b></td><td>$total</td><td>\$$current</td><td>\$$price_in</td><td>$today</td><td>$date_in</td><td>$days</td></tr>" >> email.html
+                color_class="positive"; if [[ "$total" == *"🔴"* ]]; then color_class="negative"; fi
+                echo "<tr><td><b>$ticker</b></td><td class='$color_class'>$total</td><td>\$$current</td><td>$today</td></tr>" >> index.html
               fi
             done < <(tail -n +2 signals.csv)
           fi
-
-          echo "</table><div class='footer'>Last Updated: $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M') Toronto Time</div></div></body></html>" >> index.html
-          echo "</table></body></html>" >> email.html
-
-      - name: Save Changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add signals.csv README.md index.html
-          git commit -m "Update Dashboard [Skip CI]" || exit 0
-          git push
-
-      - name: Send Email Report
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          username: ${{ secrets.MAIL_USERNAME }}
-          password: ${{ secrets.MAIL_PASSWORD }}
-          subject: Prospero Signal Report - $(date +'%Y-%m-%d %H:%M')
-          to: linus.chen1984@gmail.com
-          from: Prospero Tracker <linus.chen1984@gmail.com>
-          html_body: file://email.html
+          echo "</table><p style='text-align:center; font-size:12px; color:#999; margin-top:20px;'>Last Sync: $(date)</p></div></body></html>" >> index.html
