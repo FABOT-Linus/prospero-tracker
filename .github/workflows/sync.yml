@@ -2,39 +2,40 @@
         env:
           PROSPERO_LIST: ${{ github.event.inputs.tickers }}
         run: |
-          python prospero_tracker.py || exit 1
-          
-          # Ensure file exists so the loop doesn't crash
+          # 1. Run the Python logic
+          python prospero_tracker.py
+
+          # 2. Ensure file exists so the loop doesn't crash
           touch signals.csv
 
-          # 1. Generate README (GitHub View)
+          # 3. Generate README (GitHub View)
           echo "### 📈 Prospero Active Signals" > README.md
           echo "Last Updated (Toronto): $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
           echo "" >> README.md
           echo "| Ticker | Current Price | Gain/Loss | Today's Gain | Date In | Price In | Days |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # 2. Start Email HTML
+          # 4. Start Email HTML
           echo "<html><body><h3>📈 Prospero Signal Report</h3><p>Last Updated: $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M')</p><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Current Price</th><th>Gain/Loss</th><th>Today's Gain</th><th>Date In</th><th>Price In</th><th>Days</th></tr>" > email.html
 
-          # 3. Populate Active Section (Added || true to prevent Exit Code 1)
+          # 5. Populate Active Section
           while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
             if [ "$status" == "Active" ]; then
               echo "| **$ticker** | \$$current | $total | $today | $date_in | \$$price_in | $days |" >> README.md
-              echo "<tr><td><b>$ticker</b></td><td>\$$current</td><td>$total</td><td>$today</td><td>$date_in</td><td>\$$price_in</td><td>$days |" >> email.html
+              echo "<tr><td><b>$ticker</b></td><td>\$$current</td><td>$total</td><td>$today</td><td>$date_in</td><td>\$$price_in</td><td>$days</td></tr>" >> email.html
             fi
           done < <(tail -n +2 signals.csv) || true
 
-          # 4. Generate Exit History (README)
+          # 6. Generate Exit History (README)
           echo "" >> README.md
           echo "### 🏁 Exit History" >> README.md
           echo "| Ticker | Exit Date | Date In | Days Held | Price In | Price Out | Total Profit |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
 
-          # 5. Generate Exit History (Email)
+          # 7. Generate Exit History (Email)
           echo "</table><br><h3>🏁 Exit History</h3><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Exit Date</th><th>Date In</th><th>Days Held</th><th>Price In</th><th>Price Out</th><th>Total Profit</th></tr>" >> email.html
           
-          # 6. Populate Exit History (Added || true)
+          # 8. Populate Exit History
           while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
             if [ "$status" == "Closed" ]; then
               echo "| $ticker | $d_out | $date_in | $days | \$$price_in | \$$p_out | $total |" >> README.md
