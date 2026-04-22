@@ -1,7 +1,7 @@
 name: Prospero Sync
 on:
   schedule:
-    - cron: '37 13-20 * * 1-5'
+    - cron: '57 13-20 * * 1-5'
   workflow_dispatch:
     inputs:
       tickers:
