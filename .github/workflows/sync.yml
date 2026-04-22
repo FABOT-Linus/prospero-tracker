@@ -36,3 +36,11 @@
           fi
 
           echo "</table><div class='footer'>Last Updated: $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M') Toronto Time<br>Page auto-refreshes every 60s</div></div></body></html>" >> index.html
+- name: Save Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # We added 'index.html' to the list below so it gets saved!
+          git add signals.csv README.md index.html
+          git commit -m "Update Dashboard [Skip CI]" || exit 0
+          git push
