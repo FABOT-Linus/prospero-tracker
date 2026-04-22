@@ -1,4 +1,33 @@
-- name: Run Tracker
+name: Prospero Sync
+on:
+  schedule:
+    # 37 minutes past the hour. 
+    # 13:37 UTC (9:37 AM ET) through 20:37 UTC (4:37 PM ET)
+    - cron: '37 13-20 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: 'Add: AAPL | Remove: -VEEV'
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Libs
+        run: pip install pandas yfinance pytz
+
+      - name: Run Tracker
         env:
           PROSPERO_LIST: ${{ github.event.inputs.tickers }}
         run: |
@@ -40,5 +69,24 @@
               fi
             done < <(tail -n +2 signals.csv)
           fi
-          
           echo "</table></body></html>" >> email.html
+
+      - name: Save Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add signals.csv README.md
+          git commit -m "Automated Market Sync [Skip CI]" || exit 0
+          git push
+
+      - name: Send Email Report
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: Prospero Signal Report - $(date +'%Y-%m-%d %H:%M')
+          to: linus.chen1984@gmail.com
+          from: Prospero Tracker <linus.chen1984@gmail.com>
+          html_body: file://email.html
