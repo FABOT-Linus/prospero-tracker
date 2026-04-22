@@ -15,15 +15,21 @@ def is_market_open():
 
 def get_price_data(ticker):
     try:
-        # Fetching 2 days of data ensures we always get a valid "Open" price
-        data = yf.download(ticker, period='2d', interval='1m', progress=False)
+        # We download 'period=1d' to get today's session data
+        # 'auto_adjust=True' ensures prices are clean
+        data = yf.download(ticker, period='1d', interval='1m', progress=False, auto_adjust=True)
+        
         if not data.empty:
+            # Current Price is the most recent 'Close'
             latest = round(float(data['Close'].iloc[-1]), 2)
-            # Get the open price from the most recent session
-            today_open = round(float(data['Open'].iloc[-1]), 2)
+            
+            # Today's Open is the VERY FIRST 'Open' price recorded at 9:30 AM
+            today_open = round(float(data['Open'].iloc[0]), 2)
+            
             return latest, today_open
         return None, None
-    except:
+    except Exception as e:
+        print(f"Error fetching {ticker}: {e}")
         return None, None
 
 def format_gain(gain_val):
