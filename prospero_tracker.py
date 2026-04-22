@@ -3,33 +3,30 @@ import yfinance as yf
 from datetime import datetime, date
 import os
 import pytz
+import re
 
 CSV_FILE = 'signals.csv'
 
-def is_market_open():
-    tz = pytz.timezone('America/New_York')
-    now = datetime.now(tz)
-    if now.weekday() >= 5: return False
-    # Wider window (9:00 AM to 5:00 PM) to catch delayed GitHub runs
-    return 9 <= now.hour < 17
+def clean_gain_for_sort(gain_str):
+    """Converts '🟢 ▲ 5.55%' to 5.55 for numerical sorting."""
+    try:
+        # Extract numbers and decimals, handle the negative sign if present
+        clean = re.findall(r"[-+]?\d*\.\d+|\d+", str(gain_str))
+        if "-" in str(gain_str):
+            return -float(clean[0])
+        return float(clean[0])
+    except:
+        return -999.0
 
 def get_price_data(ticker):
     try:
-        # We download 'period=1d' to get today's session data
-        # 'auto_adjust=True' ensures prices are clean
         data = yf.download(ticker, period='1d', interval='1m', progress=False, auto_adjust=True)
-        
         if not data.empty:
-            # Current Price is the most recent 'Close'
             latest = round(float(data['Close'].iloc[-1]), 2)
-            
-            # Today's Open is the VERY FIRST 'Open' price recorded at 9:30 AM
             today_open = round(float(data['Open'].iloc[0]), 2)
-            
             return latest, today_open
         return None, None
-    except Exception as e:
-        print(f"Error fetching {ticker}: {e}")
+    except:
         return None, None
 
 def format_gain(gain_val):
@@ -38,15 +35,11 @@ def format_gain(gain_val):
 
 def main():
     raw_input = os.getenv('PROSPERO_LIST', '')
-    is_manual = raw_input.strip() != ""
-    
-    if not is_market_open() and not is_manual:
-        print("Market closed and no manual input. Skipping.")
-        return
-
     input_items = [t.strip().upper() for t in raw_input.split() if t.strip()]
-    tickers_to_activate = [t for t in input_items if not t.startswith('-')]
+    
+    # Separate tickers based on the minus sign
     tickers_to_exit = [t.lstrip('-') for t in input_items if t.startswith('-')]
+    tickers_to_activate = [t for t in input_items if not t.startswith('-')]
 
     if os.path.exists(CSV_FILE):
         df = pd.read_csv(CSV_FILE)
@@ -55,7 +48,17 @@ def main():
 
     today_str = datetime.now(pytz.timezone('America/New_York')).strftime('%Y-%m-%d')
 
-    # ADD/REACTIVATE
+    # 1. PROCESS EXITS (The "-" Logic)
+    for ticker in tickers_to_exit:
+        mask = (df['Ticker'] == ticker) & (df['Status'] == 'Active')
+        if mask.any():
+            idx = df.index[mask][0]
+            curr_p, _ = get_price_data(ticker)
+            df.at[idx, 'Status'] = 'Closed'
+            df.at[idx, 'Date_Out'] = today_str
+            df.at[idx, 'Price_Out'] = curr_p
+
+    # 2. ADD/REACTIVATE
     for ticker in tickers_to_activate:
         curr_p, today_open = get_price_data(ticker)
         if curr_p:
@@ -69,26 +72,27 @@ def main():
                 new_row = {'Ticker': ticker, 'Status': 'Active', 'Date_In': today_str, 'Price_In': today_open}
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
-    # UPDATE ACTIVE
+    # 3. UPDATE ALL ACTIVE TICKERS
     for idx, row in df.iterrows():
         if row['Status'] == 'Active':
             curr_p, today_open = get_price_data(row['Ticker'])
             if curr_p:
                 df.at[idx, 'Current_Price'] = curr_p
                 df.at[idx, 'Today_Date'] = today_str
-                
-                # Math for Days Held
                 date_in = pd.to_datetime(row['Date_In']).date()
-                days_held = (date.today() - date_in).days
-                df.at[idx, 'Days_Held'] = float(max(0, days_held))
-                
-                # Math for Gains
+                df.at[idx, 'Days_Held'] = float((date.today() - date_in).days)
                 p_in = float(row['Price_In']) if pd.notnull(row['Price_In']) else curr_p
                 df.at[idx, 'Gain_Loss'] = format_gain(((curr_p - p_in) / p_in) * 100)
-                if today_open:
-                    df.at[idx, 'Today_Gain'] = format_gain(((curr_p - today_open) / today_open) * 100)
+                df.at[idx, 'Today_Gain'] = format_gain(((curr_p - today_open) / today_open) * 100)
 
-    df.to_csv(CSV_FILE, index=False)
+    # 4. SORT BY TOTAL GAIN (DESCENDING)
+    # Temporary helper column for sorting
+    df['sort_val'] = df['Gain_Loss'].apply(clean_gain_for_sort)
+    active_df = df[df['Status'] == 'Active'].sort_values(by='sort_val', ascending=False)
+    closed_df = df[df['Status'] == 'Closed'].sort_values(by='Date_Out', ascending=False)
+    
+    final_df = pd.concat([active_df, closed_df]).drop(columns=['sort_val'])
+    final_df.to_csv(CSV_FILE, index=False)
 
 if __name__ == "__main__":
     main()
