@@ -1,31 +1,53 @@
-- name: Run Tracker
+name: Prospero Sync
+on:
+  schedule:
+    - cron: '37 13-20 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: 'Add: AAPL | Remove: -VEEV'
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Libs
+        run: pip install pandas yfinance pytz
+
+      - name: Run Tracker
         env:
           PROSPERO_LIST: ${{ github.event.inputs.tickers }}
         run: |
           python prospero_tracker.py
           
-          # Create headers for README
           echo "### 📈 Prospero Active Signals" > README.md
           echo "Last Updated (Toronto): $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M %Z')" >> README.md
           echo "" >> README.md
           echo "| Ticker | Total Gain | Current Price | Price In | Today's Gain | Date In | Days Held |" >> README.md
           echo "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |" >> README.md
           
-          # Create headers for Email
           echo "<html><body><h3>📈 Prospero Signal Report</h3><p>Last Updated: $(TZ='America/Toronto' date +'%Y-%m-%d %H:%M')</p><table border='1' style='border-collapse: collapse; width: 100%; font-family: sans-serif;'><tr style='background-color: #f2f2f2;'><th>Ticker</th><th>Total Gain</th><th>Current Price</th><th>Price In</th><th>Today's Gain</th><th>Date In</th><th>Days Held</th></tr>" > email.html
 
-          # Process CSV - Active Rows
           if [ -f signals.csv ]; then
             while IFS=, read -r ticker current total tdate today date_in price_in days status d_out p_out; do
               if [ "$status" == "Active" ]; then
-                # Reordered: Ticker ($1), Total ($3), Current ($2), Price In ($7), Today ($5), Date In ($6), Days ($8)
                 echo "| **$ticker** | $total | \$$current | \$$price_in | $today | $date_in | $days |" >> README.md
                 echo "<tr><td><b>$ticker</b></td><td>$total</td><td>\$$current</td><td>\$$price_in</td><td>$today</td><td>$date_in</td><td>$days</td></tr>" >> email.html
               fi
             done < <(tail -n +2 signals.csv)
           fi
 
-          # Exit History Section (Keeping this the same as it's a historical log)
           echo "" >> README.md
           echo "### 🏁 Exit History" >> README.md
           echo "| Ticker | Exit Date | Date In | Days Held | Price In | Price Out | Total Profit |" >> README.md
@@ -41,3 +63,23 @@
             done < <(tail -n +2 signals.csv)
           fi
           echo "</table></body></html>" >> email.html
+
+      - name: Save Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add signals.csv README.md
+          git commit -m "Automated Market Sync [Skip CI]" || exit 0
+          git push
+
+      - name: Send Email Report
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: Prospero Signal Report - $(date +'%Y-%m-%d %H:%M')
+          to: linus.chen1984@gmail.com
+          from: Prospero Tracker <linus.chen1984@gmail.com>
+          html_body: file://email.html
